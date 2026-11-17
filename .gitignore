@@ -1,0 +1,5 @@
+android/build/
+yandex/build/
+yandex/*.zip
+*.apk
+__pycache__/

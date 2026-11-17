@@ -1,0 +1,1239 @@
+<title>Туши огонь</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<!--FONTS-->
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+<!--/FONTS-->
+<style>
+/* Layout: one screen, no page scroll. Portrait stacks top-to-bottom; landscape puts the scene/board left and controls right.
+   Every canvas sits in a .fitbox that takes the leftover space and is scaled to it by script. */
+:root{
+  --bg:#120e1a; --panel:#1d1729; --edge:#3a2f52; --ink:#f3e9d2; --dim:#9a8fb0;
+  --fire:#ff8f1f; --water:#5fc7f0; --btn:#2d6fb0; --ok:#7ccf5a; --lock:#2a2338; --gold:#ffd23f;
+  --pix:"Press Start 2P", ui-monospace, "DejaVu Sans Mono", monospace;
+  color-scheme:dark;
+}
+[hidden]{display:none!important}
+html,body{height:100%;overflow:hidden;overscroll-behavior:none}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:var(--pix);box-sizing:border-box;
+  -webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent;
+  padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:12px}
+.screen{height:100%;box-sizing:border-box;max-width:560px;margin:0 auto;display:flex;flex-direction:column;gap:12px;min-height:0}
+.col{display:flex;flex-direction:column;gap:12px;min-height:0;min-width:0}
+.grow{flex:1 1 0}
+.fitbox{flex:1 1 0;min-height:90px;min-width:0;display:flex;align-items:center;justify-content:center}
+canvas{display:block;image-rendering:pixelated;image-rendering:crisp-edges}
+.frame{position:relative;padding:6px;background:var(--panel);
+  box-shadow:0 0 0 3px var(--edge),0 0 0 6px #000,8px 8px 0 6px rgba(0,0,0,.45)}
+button{font-family:var(--pix);font-size:10px;line-height:1.4;color:var(--ink);background:var(--edge);border:0;padding:11px 12px;cursor:pointer;
+  box-shadow:inset -3px -3px 0 rgba(0,0,0,.45),inset 3px 3px 0 rgba(255,255,255,.12)}
+button:active{box-shadow:inset 3px 3px 0 rgba(0,0,0,.45);transform:translateY(1px)}
+button:focus-visible{outline:2px solid var(--water);outline-offset:2px}
+button.primary{background:var(--btn)}
+button:disabled{background:var(--lock);color:#5d5372;cursor:default;box-shadow:none;transform:none}
+h1,h2{margin:0;text-wrap:balance;font-weight:400}
+.row{display:flex;gap:8px;justify-content:center;flex-wrap:wrap}
+.top{display:flex;justify-content:space-between;align-items:center;gap:10px;flex-wrap:wrap}
+
+/* меню */
+.logo{text-align:center;display:flex;flex-direction:column;gap:8px}
+.logo h1{font-size:clamp(20px,7vw,34px);line-height:1.3;color:var(--fire);text-shadow:3px 3px 0 #000,0 0 18px rgba(255,120,30,.35)}
+.logo p{font-size:9px;margin:0;color:var(--dim);line-height:1.8}
+.menu{display:flex;flex-direction:column;gap:8px;width:min(320px,100%);align-self:center}
+.menu button{font-size:12px;padding:13px 12px}
+.confirm{font-size:9px;line-height:1.9;text-align:center;color:var(--dim)}
+.foot{font-size:8px;color:#5d5372;text-align:center;line-height:1.9;margin:0}
+
+/* выбор уровня */
+.top h2{font-size:13px;color:var(--fire);line-height:1.5}
+.grid{flex:1 1 0;min-height:0;display:grid;grid-template-columns:repeat(5,1fr);grid-template-rows:repeat(6,minmax(0,1fr));gap:8px}
+.grid button{padding:2px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;font-size:13px;min-height:0}
+.grid button small{font-size:7px;color:var(--dim)}
+.grid button.done{background:#24503a}
+.grid button.done small{color:var(--ok)}
+.grid button.cur{background:var(--btn)}
+.grid button.cur small{color:var(--ink)}
+
+/* игра */
+.hud{display:flex;gap:14px;font-size:10px;color:var(--dim);flex-wrap:wrap;font-variant-numeric:tabular-nums;align-items:center}
+.hud b{color:var(--ink);font-weight:400}
+.hud .left b{color:var(--fire)}
+.lvlname{font-size:11px;color:var(--fire);line-height:1.6}
+#board{touch-action:none}
+.overlay{position:absolute;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;
+  background:rgba(10,8,16,.88);text-align:center;padding:10px;font-size:9px;line-height:1.8}
+.overlay h2{font-size:12px;color:var(--water);line-height:1.6}
+.controls{display:flex;justify-content:space-between;align-items:center;gap:12px;flex-wrap:wrap}
+.pad{display:grid;grid-template-columns:repeat(3,56px);grid-template-rows:repeat(2,56px);gap:6px}
+.pad button{font-size:18px;padding:0}
+.pad .u{grid-column:2;grid-row:1}.pad .l{grid-column:1;grid-row:2}.pad .d{grid-column:2;grid-row:2}.pad .r{grid-column:3;grid-row:2}
+.actions{display:flex;flex-direction:column;gap:6px}
+.help{font-size:8px;color:var(--dim);line-height:2;margin:0;max-width:65ch}
+.help b{color:var(--water);font-weight:400}
+
+/* финал и выход */
+.finale{text-align:center}
+.finale h1{font-size:clamp(15px,5vw,24px);line-height:1.5;color:var(--gold);text-shadow:3px 3px 0 #000}
+.finale p{font-size:9px;line-height:2;margin:0}
+.finale .stats{color:var(--water);font-variant-numeric:tabular-nums}
+.dim{color:var(--dim)}
+
+#gameSide{display:contents}
+#s-game .top{order:0} #lvlName{order:1} #boardBox{order:2} #s-game .controls{order:3} #s-game .help{order:4}
+
+/* невысокий экран: убираем второстепенные подсказки */
+@media (max-height:640px){ .help,.foot,.logo p{display:none} .screen{gap:8px} .pad{grid-template-columns:repeat(3,48px);grid-template-rows:repeat(2,48px)} }
+
+/* альбомная ориентация: сцена слева, управление справа */
+@media (min-aspect-ratio:5/4){
+  .screen{max-width:1100px;display:grid;grid-template-columns:minmax(0,1.5fr) minmax(220px,1fr);grid-template-rows:minmax(0,1fr);gap:20px;align-items:stretch}
+  .screen > .col{justify-content:center}
+  #s-levels{display:flex}
+  #gameSide{display:flex;justify-content:center}
+  #boardBox{order:0} #gameSide{order:1}
+  .grid{grid-template-columns:repeat(10,1fr);grid-template-rows:repeat(3,minmax(0,1fr))}
+  .menu{width:100%}
+  .controls{flex-direction:column;align-items:stretch}
+  .pad{align-self:center}
+  .actions{flex-direction:row;flex-wrap:wrap}
+  .actions button{flex:1 1 auto}
+}
+@media (prefers-reduced-motion: reduce){button:active{transform:none}}
+</style>
+
+<!-- ===== Главное меню ===== -->
+<section class="screen" id="s-menu">
+  <div class="col grow">
+    <div class="logo">
+      <h1 data-t="title">Туши огонь</h1>
+      <p data-t="tagline">Потуши все костры в лесу</p>
+    </div>
+    <div class="fitbox"><div class="frame"><canvas id="menuCv" width="160" height="90"></canvas></div></div>
+  </div>
+  <div class="col">
+    <div class="menu" id="menuMain">
+      <button class="primary" id="bContinue">Продолжить</button>
+      <button id="bNew" data-t="newGame">Новая игра</button>
+      <button id="bLevels" data-t="levels">Выбор уровня</button>
+      <button id="bMusic">Музыка: вкл</button>
+      <button id="bSound">Звуки: вкл</button>
+      <button id="bExit" data-t="exit">Выход</button>
+    </div>
+    <div class="menu confirm" id="menuConfirm" hidden>
+      <span data-t="confirm">Начать с первого уровня? Пройденные уровни снова закроются.</span>
+      <button class="primary" id="bNewYes" data-t="yes">Да, начать заново</button>
+      <button id="bNewNo" data-t="no">Нет, назад</button>
+    </div>
+    <p class="foot" data-t="foot">Стрелки или свайп · Enter — выбрать · Esc — назад</p>
+  </div>
+</section>
+
+<!-- ===== Выбор уровня ===== -->
+<section class="screen" id="s-levels" hidden>
+  <div class="top">
+    <h2 data-t="levels">Выбор уровня</h2>
+    <button id="bLevelsBack" data-t="back">← Меню</button>
+  </div>
+  <div class="grid" id="levelGrid"></div>
+  <p class="help" data-t="levelsHelp">Зелёные уровни пройдены, под номером — лучший результат в ходах.</p>
+</section>
+
+<!-- ===== Игра ===== -->
+<section class="screen" id="s-game" hidden>
+  <div class="fitbox" id="boardBox">
+    <div class="frame" id="stage">
+      <canvas id="board" width="128" height="128"></canvas>
+      <div class="overlay" id="win" hidden>
+        <h2 data-t="winTitle">Все костры потушены!</h2>
+        <div id="winText"></div>
+        <div class="row">
+          <button id="again" data-t="again">Ещё раз</button>
+          <button class="primary" id="next" data-t="next">Дальше</button>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="col" id="gameSide">
+    <div class="top">
+      <button id="bMenu" data-t="back">← Меню</button>
+      <div class="hud">
+        <span><span data-t="level">Уровень</span> <b id="lvl">1/30</b></span>
+        <span><span data-t="moves">Ходы</span> <b id="moves">0</b></span>
+        <span class="left"><span data-t="fires">Костры</span> <b id="fires">3</b></span>
+      </div>
+    </div>
+    <div class="lvlname" id="lvlName"></div>
+    <div class="controls">
+      <div class="pad" id="pad">
+        <button class="u" data-d="0,-1" aria-label="↑">▲</button>
+        <button class="l" data-d="-1,0" aria-label="←">◀</button>
+        <button class="d" data-d="0,1" aria-label="↓">▼</button>
+        <button class="r" data-d="1,0" aria-label="→">▶</button>
+      </div>
+      <div class="actions">
+        <button id="undo" data-t="undo">↶ Отмена</button>
+        <button id="restart" data-t="restart">↻ Заново</button>
+        <button id="bMusicG">♪ Музыка: вкл</button>
+      </div>
+    </div>
+    <p class="help" data-t="help">Дотолкай бочки с водой до костров. Бочку можно только толкать. Стрелки, WASD или свайп. Z — отмена хода, R — заново, Esc — меню.</p>
+  </div>
+</section>
+
+<!-- ===== Финал ===== -->
+<section class="screen finale" id="s-final" hidden>
+  <div class="col grow">
+    <h1 data-t="finalTitle">Молодец!<br>Ты прошёл игру</h1>
+    <div class="fitbox"><div class="frame"><canvas id="finalCv" width="160" height="100"></canvas></div></div>
+  </div>
+  <div class="col">
+    <p data-t="finalText">Все пожары потушены.<br>Лес, звери и деревня в безопасности.</p>
+    <p class="stats" id="finalStats"></p>
+    <div class="row">
+      <button class="primary" id="bFinalMenu" data-t="toMenu">В меню</button>
+      <button id="bFinalLevels" data-t="levels">Выбор уровня</button>
+    </div>
+  </div>
+</section>
+
+<!-- ===== Выход (только вне Яндекс Игр) ===== -->
+<section class="screen finale" id="s-exit" hidden>
+  <div class="col grow">
+    <h1 class="dim" data-t="exitTitle">До встречи<br>у костра</h1>
+    <div class="fitbox"><div class="frame"><canvas id="exitCv" width="160" height="90"></canvas></div></div>
+  </div>
+  <div class="col">
+    <p class="dim" data-t="exitText">Прогресс сохранён. Эту вкладку можно закрыть.</p>
+    <div class="row"><button class="primary" id="bBack" data-t="backToGame">Вернуться в игру</button></div>
+  </div>
+</section>
+
+<script>
+(() => {
+const T = 16, MOVE = 120;
+
+/* ---------- 30 уровней: # стена, . земля, P герой, B бочка, F костёр, пробел — пусто.
+   Все проверены решателем (tools/levels.py); par — минимум толчков. ---------- */
+const LEVELS = [
+  { name:"Первый привал", par:9, map:[
+    "########",
+    "#......#",
+    "#..B..F#",
+    "#.P....#",
+    "#..B..F#",
+    "#......#",
+    "#..B..F#",
+    "########"]},
+  { name:"Каменный лабиринт", par:9, map:[
+    "########",
+    "#..#...#",
+    "#.B..F.#",
+    "#.##.#.#",
+    "#P.B.F.#",
+    "#..#.#.#",
+    "#.B...F#",
+    "########"]},
+  { name:"Лесная поляна", par:8, map:[
+    " #######",
+    "##..F..#",
+    "#......#",
+    "#.B.B.F#",
+    "#..P#..#",
+    "##.B..##",
+    " #F...# ",
+    " ###### "]},
+  { name:"Тропа грибника", par:7, map:[
+    "   ####",
+    "####..#",
+    "#...#.#",
+    "#B.B..#",
+    "#F..#.#",
+    "#P.B.F#",
+    "#.F..##",
+    "###### "]},
+  { name:"Старый пень", par:7, map:[
+    " ###### ",
+    " #..#.# ",
+    "##..B.##",
+    "#.F#...#",
+    "#FB....#",
+    "#.....##",
+    "#.B..## ",
+    "#.P.F#  ",
+    "######  "]},
+  { name:"Ручей", par:7, map:[
+    "#####   ",
+    "#..F####",
+    "#.F..#.#",
+    "#...BP.#",
+    "###B...#",
+    "  #..BF#",
+    "  #....#",
+    "  #.#..#",
+    "  ######"]},
+  { name:"Барсучья нора", par:6, map:[
+    "######## ",
+    "#PF....# ",
+    "#..B...# ",
+    "#....FB##",
+    "####....#",
+    "   #..BF#",
+    "   #.####",
+    "   ###   "]},
+  { name:"Сосновый бор", par:8, map:[
+    " ####    ",
+    " #..#####",
+    "##....BP#",
+    "#BFBBF..#",
+    "##..F.###",
+    " ######  "]},
+  { name:"Овраг", par:7, map:[
+    " ##### ",
+    "##...# ",
+    "#.B..# ",
+    "#FP..##",
+    "#F..B.#",
+    "#F.B..#",
+    "##....#",
+    " ######"]},
+  { name:"Мшистые камни", par:8, map:[
+    "  #####",
+    "###...#",
+    "#..B.B#",
+    "#..B..#",
+    "#....B#",
+    "#P..FF#",
+    "###..F#",
+    "  ##..#",
+    "   ####"]},
+  { name:"Черничник", par:8, map:[
+    "   #####  ",
+    "####...## ",
+    "#.F...#.# ",
+    "#..BB.BF##",
+    "#........#",
+    "##..#.PF.#",
+    " #########"]},
+  { name:"Лисья тропа", par:8, map:[
+    " ######",
+    " #....#",
+    " #.B.F#",
+    "##BP..#",
+    "#..B#B#",
+    "#.F...#",
+    "#F.#..#",
+    "#######"]},
+  { name:"Заброшенная сторожка", par:7, map:[
+    " ######",
+    "##..F.#",
+    "#..B..#",
+    "#.....#",
+    "#....F#",
+    "#.P...#",
+    "#F.B.##",
+    "#B..B# ",
+    "#....# ",
+    "###### "]},
+  { name:"Берёзовая роща", par:9, map:[
+    "  ###### ",
+    " ##F...##",
+    "##...B..#",
+    "#F#.BB..#",
+    "#..PFB.##",
+    "#...#### ",
+    "#####    "]},
+  { name:"Волчий распадок", par:10, map:[
+    " ###### ",
+    " #F..P##",
+    " #.B.#B#",
+    " #F..#.#",
+    " #.#...#",
+    " #.B...#",
+    "##B.#F.#",
+    "#...####",
+    "#####   "]},
+  { name:"Совиное дупло", par:11, map:[
+    "   ##### ",
+    "####...# ",
+    "#F.BB..# ",
+    "#.##...##",
+    "#F..B.P.#",
+    "#...#...#",
+    "#####...#",
+    "    #F.##",
+    "    #### "]},
+  { name:"Каменная гряда", par:10, map:[
+    "   ######",
+    "####.F..#",
+    "#..#....#",
+    "#.F.F.B.#",
+    "#.....#.#",
+    "###B...##",
+    "  #.B.P# ",
+    "  #.B..# ",
+    "  ###### "]},
+  { name:"Медвежий угол", par:10, map:[
+    " #######",
+    "##.#F..#",
+    "#..F...#",
+    "#.B....#",
+    "#..B.###",
+    "#.P#B#  ",
+    "###..#  ",
+    "  #.F#  ",
+    "  ####  "]},
+  { name:"Болотные кочки", par:11, map:[
+    "  ##### ",
+    "  #...# ",
+    "  #BB.##",
+    " ##P...#",
+    " #...F##",
+    " #.B...#",
+    "##F...##",
+    "#.F#### ",
+    "####    "]},
+  { name:"Старая мельница", par:11, map:[
+    " #####  ",
+    "##...###",
+    "#.#.FF.#",
+    "#..B...#",
+    "#.B....#",
+    "##PB...#",
+    " #..####",
+    " #.F.#  ",
+    " #####  "]},
+  { name:"Туманная низина", par:12, map:[
+    "   ##### ",
+    " ###...# ",
+    "##....B##",
+    "#..F....#",
+    "#.#.P.B.#",
+    "#F...####",
+    "####.B.F#",
+    "   #....#",
+    "   ######"]},
+  { name:"Горелый лес", par:12, map:[
+    "  ######",
+    "  #.#F.#",
+    "  #.B..#",
+    "###.#BB#",
+    "#..P...#",
+    "#.B#.F##",
+    "#..##F# ",
+    "####### "]},
+  { name:"Ущелье ветров", par:12, map:[
+    "#########",
+    "#..F.F.F#",
+    "#......P#",
+    "#.B..B.##",
+    "###B#..# ",
+    " #....## ",
+    " ######  "]},
+  { name:"Лосиный брод", par:13, map:[
+    "#########",
+    "#.F.##.F#",
+    "#..P#...#",
+    "#F......#",
+    "#.B.B...#",
+    "#..B#..##",
+    "#...#### ",
+    "#####    "]},
+  { name:"Тёмная чаща", par:12, map:[
+    "     ####",
+    "######..#",
+    "#.B....F#",
+    "#..F.B..#",
+    "#.F..B#P#",
+    "#.......#",
+    "#..#...##",
+    "######## "]},
+  { name:"Пещера отшельника", par:12, map:[
+    "  #######",
+    "###.#...#",
+    "#...B...#",
+    "#.....F##",
+    "#..B.F..#",
+    "##......#",
+    "#.B.....#",
+    "##.PF####",
+    " #...#   ",
+    " #####   "]},
+  { name:"Перевал", par:13, map:[
+    "########",
+    "#..#...#",
+    "#..B...#",
+    "#P..BB##",
+    "#.#F..# ",
+    "#.B..## ",
+    "#F.F.#  ",
+    "######  "]},
+  { name:"Сухая балка", par:17, map:[
+    "  ######",
+    " ##FF..#",
+    " #....##",
+    " #....P#",
+    " #...#.#",
+    "##B.#..#",
+    "#......#",
+    "#..B...#",
+    "#F..B.##",
+    "####### "]},
+  { name:"Последний рубеж", par:19, map:[
+    " #####    ",
+    "##...#####",
+    "#...#...F#",
+    "#.B..F.F.#",
+    "#.....P..#",
+    "#.B....B.#",
+    "#...B.####",
+    "#######   "]},
+  { name:"Великий пожар", par:23, map:[
+    " #########",
+    " #F......#",
+    "##F.P..F.#",
+    "#.......##",
+    "#.BBB...# ",
+    "##..##### ",
+    "#....#    ",
+    "######    "]}
+];
+const NAMES_EN = ['First Camp','Stone Maze','Forest Glade','Mushroom Trail','Old Stump','The Brook','Badger Den','Pine Grove','The Ravine','Mossy Rocks',
+  'Blueberry Patch','Fox Path','Abandoned Hut','Birch Grove','Wolf Hollow','Owl Tree','Stone Ridge','Bear Corner','Marsh Tussocks','Old Mill',
+  'Misty Lowland','Burnt Woods','Windy Gorge','Elk Ford','Dark Thicket','Hermit Cave','Mountain Pass','Dry Gully','Last Stand','The Great Fire'];
+
+/* ---------- тексты на двух языках ---------- */
+const TEXT = {
+  ru: {
+    title:'Туши огонь', tagline:'Потуши все костры в лесу', newGame:'Новая игра', levels:'Выбор уровня', exit:'Выход',
+    music:'Музыка', sounds:'Звуки', on:'вкл', off:'выкл', play:'Играть', cont:n => 'Продолжить · ур. ' + n,
+    confirm:'Начать с первого уровня? Пройденные уровни снова закроются.', yes:'Да, начать заново', no:'Нет, назад',
+    foot:'Стрелки или свайп · Enter — выбрать · Esc — назад', back:'← Меню',
+    levelsHelp:'Зелёные уровни пройдены, под номером — лучший результат в ходах. Следующий уровень открывается после предыдущего.',
+    cellNew:'новый', cellLocked:'закрыт', cellBest:n => n + ' х.',
+    level:'Уровень', moves:'Ходы', fires:'Костры', undo:'↶ Отмена', restart:'↻ Заново',
+    help:'Дотолкай бочки с водой до костров. Бочку можно только толкать. Стрелки, WASD или свайп. Z — отмена хода, R — заново, Esc — меню.',
+    winTitle:'Все костры потушены!', again:'Ещё раз', next:'Дальше',
+    winText:(name, m) => '«' + name + '» пройден за ' + m + ' ' + plural(m, 'ход', 'хода', 'ходов') + '.',
+    finalTitle:'Молодец!<br>Ты прошёл игру', finalText:'Все пожары потушены.<br>Лес, звери и деревня в безопасности.',
+    stats:(l, f, m) => 'Уровней: ' + l + ' из 30 · костров потушено: ' + f + ' · ходов: ' + m, toMenu:'В меню',
+    exitTitle:'До встречи<br>у костра', exitText:'Прогресс сохранён. Эту вкладку можно закрыть.', backToGame:'Вернуться в игру',
+    board:'Игровое поле'
+  },
+  en: {
+    title:'Put Out the Fire', tagline:'Put out every campfire in the forest', newGame:'New game', levels:'Levels', exit:'Exit',
+    music:'Music', sounds:'Sounds', on:'on', off:'off', play:'Play', cont:n => 'Continue · lv. ' + n,
+    confirm:'Start from level 1? Completed levels will be locked again.', yes:'Yes, start over', no:'No, go back',
+    foot:'Arrows or swipe · Enter to select · Esc to go back', back:'← Menu',
+    levelsHelp:'Green levels are done; the number below is your best move count. Each level opens after the one before it.',
+    cellNew:'new', cellLocked:'locked', cellBest:n => n + ' mv',
+    level:'Level', moves:'Moves', fires:'Fires', undo:'↶ Undo', restart:'↻ Restart',
+    help:'Push the water barrels onto the campfires. Barrels can only be pushed. Arrows, WASD or swipe. Z undo, R restart, Esc menu.',
+    winTitle:'All fires are out!', again:'Retry', next:'Next',
+    winText:(name, m) => '“' + name + '” done in ' + m + ' ' + (m === 1 ? 'move' : 'moves') + '.',
+    finalTitle:'Well done!<br>You beat the game', finalText:'Every fire is out.<br>The forest, the animals and the village are safe.',
+    stats:(l, f, m) => 'Levels: ' + l + ' of 30 · fires put out: ' + f + ' · moves: ' + m, toMenu:'Menu',
+    exitTitle:'See you<br>by the fire', exitText:'Your progress is saved. You can close this tab.', backToGame:'Back to the game',
+    board:'Game board'
+  }
+};
+let lang = 'ru';
+const t = k => TEXT[lang][k];
+function pickLang(code){ code = (code || '').slice(0, 2).toLowerCase(); return ['ru','be','kk','uk','uz'].includes(code) ? 'ru' : 'en'; }
+function applyLang(code){
+  lang = pickLang(code);
+  document.documentElement.lang = lang;
+  document.title = t('title');
+  document.querySelectorAll('[data-t]').forEach(el => { el.innerHTML = t(el.dataset.t); });
+  $('board').setAttribute('aria-label', t('board'));
+  labels();
+}
+const levelName = i => lang === 'ru' ? LEVELS[i].name : NAMES_EN[i];
+
+/* ---------- палитра и спрайты 16×16 ---------- */
+const PAL = {
+  k:'#1b1420', h:'#6b3b1f', s:'#f2c39b', m:'#b5523b', b:'#3f78c9', p:'#3a3448', d:'#20182a',
+  w:'#5fc7f0', W:'#c9f1ff', n:'#9a5a2e', N:'#6e3d1d', g:'#8a8f9c', v:'#3a2a20',
+  y:'#e8401c', r:'#ff8f1f', o:'#ffd23f', Y:'#fff7d1', L:'#5a3418', l:'#7d4a24', c:'#2b2326', e:'#4a3a35'
+};
+const HERO_BASE = [
+  '................',
+  '.....kkkkkk.....',
+  '....khhhhhhk....',
+  '...khhhhhhhhk...',
+  '...khsssssshk...',
+  '...kssksskssk...',
+  '...ksssmmsssk...',
+  '....kssssssk....',
+  '...kbbbbbbbbk...',
+  '..kbbbbbbbbbbk..',
+  '..ksbbbbbbbbsk..',
+  '..ksbbbbbbbbsk..',
+  '...kppppppppk...',
+  '...kpppkkpppk...',
+  '...kppk..kppk...',
+  '...kddk..kddk...'];
+function hero(dir, step){
+  const r = HERO_BASE.slice();
+  if (dir === 'up') { r[4]='...khhhhhhhhk...'; r[5]='...khhhhhhhhk...'; r[6]='...khhhhhhhhk...'; r[7]='....khhhhhhk....'; }
+  if (dir === 'left')  r[5]='...kskssksssk...';
+  if (dir === 'right') r[5]='...kssskssksk...';
+  if (dir === 'cheer') { r[6]='...ksmmmmmmsk...'; r[7]='.s..kssssssk..s.'; r[8]='.sskbbbbbbbbkss.'; r[9]='..kbbbbbbbbbbk..'; r[10]='...kbbbbbbbbk...'; r[11]='...kbbbbbbbbk...'; }
+  if (step) { r[14]='....kppk.kppk...'; r[15]='....kddk.kddk...'; }
+  return r;
+}
+const BARREL = [
+  '................',
+  '....kkkkkkkk....',
+  '...kwwwwwwwwk...',
+  '..kwWWwwwwwwwk..',
+  '..kkkkkkkkkkkk..',
+  '..knnnnnnnnnnk..',
+  '.kggggggggggggk.',
+  '.knNnnNnnNnnNnk.',
+  '.knNnnNnnNnnNnk.',
+  '.knNnnNnnNnnNnk.',
+  '.kggggggggggggk.',
+  '..knNnnNnnNnNk..',
+  '..knNnnNnnNnNk..',
+  '...kkkkkkkkkk...',
+  '................',
+  '................'];
+const BARREL_EMPTY = BARREL.map((r, i) => i === 2 ? '...kvvvvvvvvk...' : i === 3 ? '..kvvvvvvvvvvk..' : r);
+const FIRE_A = [
+  '................',
+  '.......y........',
+  '......yy........',
+  '......yry...y...',
+  '.....yrry..yy...',
+  '....yrrry.yry...',
+  '....yrrrryyrry..',
+  '...yrroorrrrry..',
+  '...yrooooorrry..',
+  '...yrooYoooory..',
+  '....rooYYoorr...',
+  '....rroYYoorr...',
+  '..LLLLLLLLLLLL..',
+  '.LLlLLLLLLLlLLL.',
+  '..LLLLLLLLLLLL..',
+  '................'];
+const FIRE_B = FIRE_A.map(s => s.split('').reverse().join(''));
+const FIRE_OUT = [
+  '................','................','................','................','................',
+  '................','................','................','................','................',
+  '....wwwwwwww....',
+  '..wwWwwwwwwwww..',
+  '.wwcccccccccccw.',
+  '.wcceccccccecw..',
+  '..wcccccccccww..',
+  '...wwwwwwwww....'];
+const LOGS = FIRE_A.map((r, i) => i < 12 ? '................' : r);
+
+function makeSprite(rows){
+  const c = document.createElement('canvas'); c.width = T; c.height = T;
+  const x = c.getContext('2d');
+  rows.forEach((row, j) => [...row].forEach((ch, i) => {
+    if (ch === '.' || ch === ' ') return;
+    x.fillStyle = PAL[ch] || '#f0f'; x.fillRect(i, j, 1, 1);
+  }));
+  return c;
+}
+const SPR = {
+  barrel: makeSprite(BARREL), barrelEmpty: makeSprite(BARREL_EMPTY),
+  fireA: makeSprite(FIRE_A), fireB: makeSprite(FIRE_B), fireOut: makeSprite(FIRE_OUT), logs: makeSprite(LOGS), hero: {}
+};
+for (const d of ['down','up','left','right','cheer']) for (const s of [0,1]) SPR.hero[d+s] = makeSprite(hero(d, s));
+const fireSpr = (now, seed) => (Math.floor(now / 160) + seed) % 2 ? SPR.fireA : SPR.fireB;
+
+/* ---------- Яндекс Игры (SDK есть только в сборке для Яндекса) ---------- */
+let ysdk = null, gameplayOn = false;
+function gameplay(on){
+  if (on === gameplayOn) return; gameplayOn = on;
+  try { ysdk && ysdk.features.GameplayAPI && (on ? ysdk.features.GameplayAPI.start() : ysdk.features.GameplayAPI.stop()); } catch (e) {}
+}
+function syncGameplay(){ gameplay(screen === 'game' && !won && !paused.size); }
+// показ рекламы между уровнями; звук и игра на это время на паузе
+function showAd(done){
+  let finished = false; const go = () => { if (finished) return; finished = true; pause('ad', false); done(); };
+  if (!ysdk || !ysdk.adv) { go(); return; }
+  try {
+    ysdk.adv.showFullscreenAdv({ callbacks: {
+      onOpen: () => pause('ad', true),
+      onClose: go,
+      onError: go,
+      onOffline: go
+    }});
+  } catch (e) { go(); }
+}
+
+/* ---------- прогресс ---------- */
+const KEY = 'tushi-ogon-v1';
+let prog = { best:{}, cur:0, sound:true, music:true };
+try { const s = JSON.parse(localStorage.getItem(KEY) || localStorage.getItem('sokoban-fire-v2')); if (s && s.best) prog = Object.assign(prog, s); } catch (e) {}
+function saveProg(){ try { localStorage.setItem(KEY, JSON.stringify(prog)); } catch (e) {} }
+const isDone = i => prog.best[i] != null;
+const unlocked = i => i === 0 || isDone(i - 1) || isDone(i);
+const doneCount = () => LEVELS.filter((_, i) => isDone(i)).length;
+const firstOpen = () => { for (let i = 0; i < LEVELS.length; i++) if (!isDone(i)) return i; return LEVELS.length - 1; };
+
+/* ---------- экраны ---------- */
+let screen = 'menu';
+const $ = id => document.getElementById(id);
+function show(name){
+  screen = name;
+  for (const s of ['menu','levels','game','final','exit']) $('s-' + s).hidden = s !== name;
+  parts = [];
+  if (name === 'menu') refreshMenu();
+  if (name === 'levels') buildGrid();
+  fit(); syncGameplay();
+  const first = $('s-' + name).querySelector('.grid button.cur, button.primary:not([hidden]), button:not([disabled])');
+  if (first && name !== 'game') first.focus({ preventScroll:true });
+}
+function refreshMenu(){
+  $('menuMain').hidden = false; $('menuConfirm').hidden = true;
+  const started = doneCount() > 0;
+  $('bContinue').hidden = !started;
+  $('bContinue').textContent = doneCount() === LEVELS.length ? t('play') : t('cont')(firstOpen() + 1);
+  $('bNew').classList.toggle('primary', !started);
+  $('bExit').hidden = !!ysdk || window.YAGAMES;
+  labels();
+}
+function labels(){
+  const st = v => v ? t('on') : t('off');
+  $('bSound').textContent = t('sounds') + ': ' + st(prog.sound);
+  $('bMusic').textContent = t('music') + ': ' + st(prog.music);
+  $('bMusicG').textContent = '♪ ' + t('music') + ': ' + st(prog.music);
+}
+function buildGrid(){
+  const g = $('levelGrid'); g.innerHTML = '';
+  const cur = firstOpen();
+  LEVELS.forEach((L, i) => {
+    const b = document.createElement('button');
+    const open = unlocked(i);
+    b.disabled = !open;
+    if (isDone(i)) b.className = 'done'; else if (i === cur && open) b.className = 'cur';
+    b.innerHTML = (open ? (i + 1) : '×') + '<small>' + (isDone(i) ? t('cellBest')(prog.best[i]) : open ? t('cellNew') : t('cellLocked')) + '</small>';
+    b.setAttribute('aria-label', t('level') + ' ' + (i + 1) + ', ' + levelName(i));
+    b.title = levelName(i);
+    b.onclick = () => startLevel(i);
+    g.appendChild(b);
+  });
+}
+
+/* ---------- состояние уровня ---------- */
+const cv = $('board'), ctx = cv.getContext('2d');
+let level = 0, grid, cols, rows, bg, fires, barrels, player, moves, history, busy = false, queued = null, won = false;
+let parts = [];
+
+function rnd(seed){ let s = seed >>> 0; return () => ((s = (s * 1664525 + 1013904223) >>> 0) / 4294967296); }
+
+function startLevel(i){ load(i); show('game'); }
+function load(i){
+  level = i; won = false; busy = false; queued = null; parts = [];
+  prog.cur = i; saveProg();
+  const map = LEVELS[i].map;
+  rows = map.length; cols = Math.max(...map.map(r => r.length));
+  grid = []; fires = []; barrels = []; moves = 0; history = [];
+  for (let y = 0; y < rows; y++) { grid.push([]); for (let x = 0; x < cols; x++) {
+    const ch = map[y][x] || ' ';
+    grid[y].push(ch === '#' ? 'wall' : ch === ' ' ? 'void' : 'floor');
+    if (ch === 'P') player = ent(x, y, { dir:'down', step:0 });
+    if (ch === 'B') barrels.push(ent(x, y));
+    if (ch === 'F') fires.push({ x, y, out:false, outT:0 });
+  }}
+  cv.width = cols * T; cv.height = rows * T;
+  buildBg(); fit(); hud();
+  $('lvlName').textContent = levelName(i);
+  $('win').hidden = true;
+  syncGameplay();
+}
+function ent(x, y, extra){ return Object.assign({ x, y, fx:x, fy:y, t0:0 }, extra); }
+
+function floorTile(g, X, Y, R){
+  g.fillStyle = '#2e3f2c'; g.fillRect(X, Y, T, T);
+  for (let i = 0; i < 14; i++) { g.fillStyle = R() < .5 ? '#36502f' : '#25331f'; g.fillRect(X + (R()*T|0), Y + (R()*T|0), 1, 1); }
+  for (let i = 0; i < 3; i++) { g.fillStyle = '#4a6a3c'; const a = X + (R()*14|0), b = Y + (R()*13|0); g.fillRect(a, b, 1, 2); g.fillRect(a+1, b+1, 1, 2); }
+  if (R() < .25) { g.fillStyle = '#6d6a7a'; g.fillRect(X + 3 + (R()*9|0), Y + 3 + (R()*9|0), 2, 1); }
+  if (R() < .15) { g.fillStyle = '#e8d36a'; g.fillRect(X + 2 + (R()*11|0), Y + 2 + (R()*11|0), 1, 1); }
+}
+function buildBg(){
+  bg = document.createElement('canvas'); bg.width = cols * T; bg.height = rows * T;
+  const g = bg.getContext('2d');
+  for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+    const R = rnd(x * 73 + y * 151 + level * 997), X = x * T, Y = y * T;
+    if (grid[y][x] === 'floor') floorTile(g, X, Y, R);
+    else if (grid[y][x] === 'wall') {
+      g.fillStyle = '#2a2538'; g.fillRect(X, Y, T, T);
+      for (let r = 0; r < 4; r++) {
+        const off = (r % 2) ? -4 : 0;
+        for (let c = off; c < T; c += 8) {
+          const bx = X + Math.max(c, 0), bw = Math.min(c + 7, T) - Math.max(c, 0);
+          if (bw <= 0) continue;
+          const shade = R();
+          g.fillStyle = shade < .33 ? '#4b4560' : shade < .66 ? '#554e6c' : '#433d56';
+          g.fillRect(bx, Y + r * 4, bw, 3);
+          g.fillStyle = '#6a6384'; g.fillRect(bx, Y + r * 4, bw, 1);
+        }
+      }
+    }
+  }
+  for (let y = 0; y < rows - 1; y++) for (let x = 0; x < cols; x++)
+    if (grid[y][x] === 'wall' && grid[y+1][x] === 'floor') { g.fillStyle = 'rgba(0,0,0,.35)'; g.fillRect(x*T, (y+1)*T, T, 3); }
+}
+
+/* ---------- логика ---------- */
+const wall = (x, y) => !grid[y] || grid[y][x] !== 'floor';
+const barrelAt = (x, y) => barrels.find(b => b.x === x && b.y === y);
+const fireAt = (x, y) => fires.find(f => !f.out && f.x === x && f.y === y);
+
+function setMove(e, x, y){ e.fx = e.x; e.fy = e.y; e.x = x; e.y = y; e.t0 = performance.now(); }
+function save(){ history.push({ p:[player.x, player.y, player.dir], b:barrels.map(b => [b.x, b.y]), f:fires.map(f => f.out), m:moves }); }
+
+function tryMove(dx, dy){
+  if (won || screen !== 'game' || paused.size) return;
+  if (busy) { queued = [dx, dy]; return; }
+  player.dir = dx > 0 ? 'right' : dx < 0 ? 'left' : dy < 0 ? 'up' : 'down';
+  const nx = player.x + dx, ny = player.y + dy;
+  if (wall(nx, ny) || fireAt(nx, ny)) return;
+  const b = barrelAt(nx, ny);
+  if (b) {
+    const bx = nx + dx, by = ny + dy;
+    if (wall(bx, by) || barrelAt(bx, by)) return;
+    save();
+    setMove(b, bx, by);
+    const f = fireAt(bx, by);
+    if (f) setTimeout(() => extinguish(b, f), MOVE);
+    tone(90, 0, .07, 'triangle', .12);
+  } else {
+    save();
+    tone(160, 0, .03, 'square', .025);
+  }
+  setMove(player, nx, ny);
+  player.step ^= 1; moves++; busy = true; hud();
+  setTimeout(() => { busy = false; if (queued) { const q = queued; queued = null; tryMove(...q); } }, MOVE);
+}
+
+function extinguish(b, f){
+  const i = barrels.indexOf(b); if (i < 0 || f.out) return;
+  barrels.splice(i, 1); f.out = true; f.outT = performance.now();
+  steam(f.x, f.y); hiss(); hud();
+  if (fires.every(f => f.out)) {
+    won = true; syncGameplay();
+    const prev = prog.best[level];
+    if (prev == null || moves < prev) prog.best[level] = moves;
+    saveProg();
+    setTimeout(showWin, 1300);
+  }
+}
+
+function undo(){
+  if (busy || won || !history.length) return;
+  const s = history.pop();
+  player = ent(s.p[0], s.p[1], { dir:s.p[2], step:0 });
+  barrels = s.b.map(([x, y]) => ent(x, y));
+  fires.forEach((f, i) => f.out = s.f[i]);
+  moves = s.m; hud();
+}
+
+function hud(){
+  $('lvl').textContent = (level + 1) + '/' + LEVELS.length;
+  $('moves').textContent = moves;
+  $('fires').textContent = fires.filter(f => !f.out).length;
+}
+
+function showWin(){
+  if (screen !== 'game') return;
+  if (level === LEVELS.length - 1) { finale(); return; }
+  $('winText').textContent = t('winText')(levelName(level), moves);
+  $('win').hidden = false;
+  [523, 659, 784, 1046].forEach((f, i) => tone(f, i * .11, .14, 'square', .06));
+  $('next').focus();
+}
+function finale(){
+  const total = Object.values(prog.best).reduce((a, b) => a + b, 0);
+  $('finalStats').textContent = t('stats')(doneCount(), doneCount() * 3, total);
+  show('final');
+  [523, 659, 784, 1046, 784, 1046, 1318].forEach((f, i) => tone(f, i * .14, .2, 'square', .06));
+}
+function plural(n, a, b, c){ const m10 = n % 10, m100 = n % 100; return m10 === 1 && m100 !== 11 ? a : m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20) ? b : c; }
+
+/* ---------- частицы ---------- */
+function steam(cx, cy){
+  const X = cx * T + 8, Y = cy * T + 10;
+  for (let i = 0; i < 46; i++) parts.push({ x: X + (Math.random()*10 - 5), y: Y - Math.random()*4, vx:(Math.random()-.5)*10, vy:-(10 + Math.random()*22),
+    age:-Math.random()*.5, max:1.3 + Math.random()*1.2, size:1, grow:1 + Math.random()*2, kind:'steam' });
+  for (let i = 0; i < 18; i++) parts.push({ x: X, y: Y - 2, vx:(Math.random()-.5)*80, vy:-(15 + Math.random()*45), age:0, max:.5 + Math.random()*.3, size:1, kind:'drop' });
+  parts.push({ x: X, y: Y - 2, age:0, max:.25, kind:'flash' });
+}
+function ember(x, y){ parts.push({ x: x + Math.random()*6, y, vx:(Math.random()-.5)*8, vy:-(12 + Math.random()*10), age:0, max:.6 + Math.random()*.5, size:1, kind:'ember' }); }
+function smoke(x, y, max = 1.6){ parts.push({ x: x + Math.random()*2, y, vx:(Math.random()-.5)*3, vy:-6, age:0, max, size:1, kind:'smoke' }); }
+function stepParts(dt){
+  for (const p of parts) {
+    p.age += dt; if (p.age < 0) continue;
+    if (p.kind === 'drop') p.vy += 160 * dt;
+    if (p.kind === 'steam') { p.vx *= .98; p.size = 1 + Math.floor(p.grow * p.age / p.max * 1.6); }
+    if (p.vx !== undefined) { p.x += p.vx * dt; p.y += p.vy * dt; }
+  }
+  parts = parts.filter(p => p.age < p.max);
+}
+function drawParts(c){
+  for (const p of parts) {
+    if (p.age < 0) continue;
+    const k = p.age / p.max, a = 1 - k;
+    if (p.kind === 'flash') { const x = Math.round(p.x), y = Math.round(p.y) - 3, r = 2 + Math.round(k * 6); c.fillStyle = `rgba(230,250,255,${.8*a})`; c.fillRect(x - r, y, r * 2, 1); c.fillRect(x, y - r, 1, r * 2); c.fillRect(x - 1, y - 1, 3, 3); continue; }
+    c.fillStyle = p.kind === 'steam' ? (k < .4 ? `rgba(240,248,252,${a})` : `rgba(185,196,206,${a*.85})`)
+      : p.kind === 'drop' ? '#7fd6ff'
+      : p.kind === 'ember' ? (k < .5 ? '#ffd23f' : '#ff7a1c')
+      : `rgba(120,115,130,${a*.6})`;
+    const s = p.size;
+    c.fillRect(Math.round(p.x - s/2), Math.round(p.y - s/2), s, s);
+  }
+}
+function glow(c, cx, cy, now, seed, scale = 1){
+  c.globalCompositeOperation = 'lighter';
+  const fl = Math.sin(now / 90 + seed * 3) * 1.5 + Math.random();
+  [[22, .07], [15, .08], [9, .1]].forEach(([r, a]) => {
+    c.fillStyle = `rgba(255,140,40,${a})`; c.beginPath(); c.arc(cx, cy, Math.round(r * scale + fl), 0, 7); c.fill();
+  });
+  c.globalCompositeOperation = 'source-over';
+}
+
+/* ---------- отрисовка поля ---------- */
+function pos(e, now){ const k = Math.max(0, Math.min(1, (now - e.t0) / MOVE)); return [(e.fx + (e.x - e.fx) * k) * T, (e.fy + (e.y - e.fy) * k) * T, k]; }
+function shadow(c, x, y){ c.fillStyle = 'rgba(0,0,0,.35)'; c.fillRect(x + 4, y + 13, 8, 2); c.fillRect(x + 3, y + 14, 10, 1); }
+
+function drawGame(now, dt){
+  for (const f of fires) {
+    if (!f.out && Math.random() < dt * 5) ember(f.x*T + 5, f.y*T + 5);
+    if (f.out && now - f.outT > 1500 && Math.random() < dt * 1.2) smoke(f.x*T + 7, f.y*T + 11);
+  }
+  stepParts(dt);
+  ctx.imageSmoothingEnabled = false;
+  ctx.fillStyle = '#120e1a'; ctx.fillRect(0, 0, cv.width, cv.height);
+  ctx.drawImage(bg, 0, 0);
+  for (const f of fires) if (f.out) ctx.drawImage(SPR.fireOut, f.x * T, f.y * T);
+  for (const f of fires) if (!f.out) glow(ctx, f.x * T + 8, f.y * T + 9, now, f.x);
+  for (const f of fires) if (!f.out) ctx.drawImage(fireSpr(now, f.x + f.y), f.x * T, f.y * T);
+  const ents = barrels.map(b => ({ e:b, t:'b' })).concat([{ e:player, t:'p' }]);
+  ents.sort((a, b) => a.e.y - b.e.y);
+  for (const { e, t } of ents) {
+    const [x, y, k] = pos(e, now);
+    shadow(ctx, x, y);
+    if (t === 'b') ctx.drawImage(SPR.barrel, Math.round(x), Math.round(y));
+    else {
+      const walking = k < 1, bob = walking && k > .25 && k < .75 ? 1 : 0;
+      ctx.drawImage(SPR.hero[e.dir + (walking ? e.step : 0)], Math.round(x), Math.round(y) - 2 - bob);
+    }
+  }
+  drawParts(ctx);
+}
+
+/* ---------- сцены: меню, финал, выход ---------- */
+function pine(c, x, base, h, dark, light){
+  c.fillStyle = '#3b2616'; c.fillRect(x - 1, base - 3, 2, 3);
+  const L = Math.max(3, Math.floor(h / 3));
+  for (let r = 0; r < h - 3; r++) {
+    const w = 1 + 2 * (Math.floor((r % L) * .9) + Math.floor(r / L));
+    c.fillStyle = dark; c.fillRect(x - Math.floor(w / 2), base - h + r, w, 1);
+    if (light && w > 2) { c.fillStyle = light; c.fillRect(x - Math.floor(w / 2), base - h + r, 1, 1); }
+  }
+}
+const STARS = Array.from({ length: 34 }, (_, i) => { const R = rnd(i * 31 + 7); return [R()*160|0, R()*50|0, R()]; });
+
+function sceneNight(c, W, H, now, opts){
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = '#1e1833'; c.fillRect(0, 0, W, H);
+  ['#0d0a17','#120e20','#181329','#1e1833'].forEach((col, i) => { c.fillStyle = col; c.fillRect(0, i * H / 6, W, H / 6 + 1); });
+  for (const [x, y, tw] of STARS) { if (Math.sin(now / 500 + tw * 40) > -.3) { c.fillStyle = tw > .7 ? '#fff6c2' : '#9a8fb0'; c.fillRect(x, y, 1, 1); } }
+  c.fillStyle = '#e8e2c8'; c.beginPath(); c.arc(132, 14, 5, 0, 7); c.fill();
+  c.fillStyle = '#0d0a17'; c.beginPath(); c.arc(135, 12, 5, 0, 7); c.fill();
+  for (let i = 0; i < 9; i++) pine(c, 6 + i * 19 + (i % 2) * 5, H - 22, 26 + (i * 7 % 11), '#161d22', null);
+  c.fillStyle = '#22301f'; c.fillRect(0, H - 24, W, 24);
+  const R = rnd(5); for (let i = 0; i < 70; i++) { c.fillStyle = R() < .5 ? '#2b3c28' : '#1a2418'; c.fillRect(R()*W|0, H - 24 + (R()*24|0), 1, 1); }
+  const fx = W / 2 - 8, fy = H - 30;
+  if (opts.fire) {
+    glow(c, fx + 8, fy + 9, now, 1, 1.6);
+    c.drawImage(fireSpr(now, 0), fx, fy);
+    if (Math.random() < .3) ember(fx + 5, fy + 5);
+  } else {
+    c.drawImage(SPR.logs, fx, fy);
+    if (Math.random() < .08) smoke(fx + 7, fy + 11, 2.4);
+  }
+  shadow(c, fx - 26, fy); c.drawImage(SPR.hero[opts.fire ? 'right0' : 'up0'], fx - 26, fy - 2);
+  shadow(c, fx + 26, fy); c.drawImage(SPR.barrel, fx + 26, fy);
+}
+
+let finalT = 0;
+function sceneDawn(c, W, H, now){
+  c.imageSmoothingEnabled = false;
+  c.fillStyle = '#5a9a4a'; c.fillRect(0, 0, W, H);
+  ['#6fb7e0','#86c4e6','#a6d3e6','#d9dcc4','#f5d6a0','#f6b26b'].forEach((col, i) => { c.fillStyle = col; c.fillRect(0, i * 9, W, 10); });
+  const sunY = 50 - Math.min(14, (now - finalT) / 400);
+  c.fillStyle = '#fff1b0'; c.beginPath(); c.arc(112, sunY, 11, 0, 7); c.fill();
+  c.fillStyle = '#ffe48a'; c.beginPath(); c.arc(112, sunY, 8, 0, 7); c.fill();
+  ['#e8401c','#ff8f1f','#ffd23f','#7ccf5a','#5fc7f0','#6a5acd'].forEach((col, i) => {
+    c.strokeStyle = col; c.lineWidth = 2; c.globalAlpha = .55; c.beginPath(); c.arc(34, 64, 34 - i * 2, Math.PI, 2 * Math.PI); c.stroke();
+  });
+  c.globalAlpha = 1;
+  c.fillStyle = '#4f8f45'; c.beginPath(); c.ellipse(40, 66, 70, 16, 0, 0, 7); c.fill();
+  c.fillStyle = '#3f7a3a'; c.beginPath(); c.ellipse(130, 68, 60, 14, 0, 0, 7); c.fill();
+  for (let i = 0; i < 6; i++) pine(c, 8 + i * 11, 64 + (i % 2), 18 + (i * 5 % 7), '#2e5e2c', '#4f8f45');
+  const hx = 118, hy = 50;
+  c.fillStyle = '#c98a4a'; c.fillRect(hx, hy, 18, 12); c.fillStyle = '#8a5a2e'; c.fillRect(hx + 7, hy + 5, 4, 7);
+  c.fillStyle = '#ffe48a'; c.fillRect(hx + 2, hy + 3, 3, 3); c.fillRect(hx + 13, hy + 3, 3, 3);
+  for (let r = 0; r < 8; r++) { c.fillStyle = '#b5523b'; c.fillRect(hx - 2 + r, hy - 8 + r, 22 - 2 * r, 1); }
+  c.fillStyle = '#6b3b1f'; c.fillRect(hx + 13, hy - 10, 3, 6);
+  if (Math.random() < .1) smoke(hx + 14, hy - 11, 2.2);
+  c.fillStyle = '#5a9a4a'; c.fillRect(0, 70, W, H - 70);
+  const R = rnd(9); for (let i = 0; i < 120; i++) { c.fillStyle = ['#6bb05a','#4a8a3c','#e8d36a','#f2f2f2'][R()*4|0]; c.fillRect(R()*W|0, 70 + (R()*(H-70)|0), 1, 1); }
+  [[18, 76], [126, 80], [96, 72]].forEach(([x, y]) => c.drawImage(SPR.fireOut, x, y));
+  const jump = Math.floor(now / 300) % 2;
+  shadow(c, 66, 78); c.drawImage(SPR.hero[jump ? 'cheer0' : 'down0'], 66, 76 - jump * 2);
+  shadow(c, 44, 80); c.drawImage(SPR.barrelEmpty, 44, 80);
+  shadow(c, 88, 78); c.drawImage(SPR.barrelEmpty, 88, 78);
+  shadow(c, 104, 86); c.drawImage(SPR.barrelEmpty, 104, 86);
+  const bx = 140 - ((now / 40) % 40 < 20 ? 0 : 1);
+  c.fillStyle = '#f2f2f2'; c.fillRect(bx, 88, 5, 4); c.fillRect(bx + 3, 85, 3, 3); c.fillRect(bx + 3, 82, 1, 3); c.fillRect(bx + 5, 82, 1, 3);
+  c.fillStyle = '#1b1420'; c.fillRect(bx + 5, 86, 1, 1);
+  for (let i = 0; i < 3; i++) {
+    const x = ((now / 60 + i * 50) % 200) - 20, y = 14 + i * 7 + Math.sin(now / 300 + i) * 2, up = Math.floor(now / 200 + i) % 2;
+    c.fillStyle = '#2b2a3a'; c.fillRect(x, y, 1, 1); c.fillRect(x - 1, y - up, 1, 1); c.fillRect(x + 1, y - up, 1, 1); c.fillRect(x - 2, y - up, 1, 1); c.fillRect(x + 2, y - up, 1, 1);
+  }
+  if (Math.random() < .25) parts.push({ x: Math.random() * W, y: 72 + Math.random() * 25, vx:0, vy:-4, age:0, max:.7, size:1, kind:'drop' });
+}
+
+const menuCv = $('menuCv'), menuCtx = menuCv.getContext('2d');
+const finalCv = $('finalCv'), finalCtx = finalCv.getContext('2d');
+const exitCv = $('exitCv'), exitCtx = exitCv.getContext('2d');
+
+/* ---------- главный цикл ---------- */
+let lastT = performance.now();
+function frame(now){
+  const dt = Math.min(.05, Math.max(0, (now - lastT) / 1000)); lastT = now;
+  if (screen === 'game') drawGame(now, paused.size ? 0 : dt);
+  else if (screen === 'menu') { sceneNight(menuCtx, 160, 90, now, { fire:true }); stepParts(dt); drawParts(menuCtx); }
+  else if (screen === 'exit') { sceneNight(exitCtx, 160, 90, now, { fire:false }); stepParts(dt); drawParts(exitCtx); }
+  else if (screen === 'final') { if (!finalT) finalT = now; sceneDawn(finalCtx, 160, 100, now); stepParts(dt); drawParts(finalCtx); }
+  if (screen !== 'final') finalT = 0;
+  requestAnimationFrame(frame);
+}
+
+/* ---------- масштаб: холст вписывается в свою коробку ---------- */
+function scaleInto(c, W, H){
+  const box = c.closest('.fitbox'); if (!box || box.offsetParent === null) return;
+  const bw = box.clientWidth - 26, bh = box.clientHeight - 26;
+  let s = Math.min(bw / W, bh / H);
+  s = s >= 3 ? Math.floor(s) : Math.max(.5, Math.floor(s * 4) / 4);
+  c.style.width = W * s + 'px'; c.style.height = H * s + 'px';
+}
+function fit(){
+  if (cols) scaleInto(cv, cols * T, rows * T);
+  scaleInto(menuCv, 160, 90); scaleInto(exitCv, 160, 90); scaleInto(finalCv, 160, 100);
+}
+addEventListener('resize', fit);
+if (window.ResizeObserver) { const ro = new ResizeObserver(fit); document.querySelectorAll('.fitbox').forEach(b => ro.observe(b)); }
+
+/* ---------- звук ---------- */
+let AC = null;
+const paused = new Set();   // причины паузы: hidden, ad, api
+function ac(){ if (!AC) { try { AC = new (window.AudioContext || window.webkitAudioContext)(); } catch (e) {} } if (AC && AC.state === 'suspended' && !paused.size) AC.resume(); return AC; }
+function pause(reason, on){
+  on ? paused.add(reason) : paused.delete(reason);
+  if (AC) { try { paused.size ? AC.suspend() : AC.resume(); } catch (e) {} }
+  syncGameplay();
+}
+function tone(freq, delay, dur, type, vol){
+  const a = prog.sound && ac(); if (!a) return;
+  const t0 = a.currentTime + delay, o = a.createOscillator(), g = a.createGain();
+  o.type = type; o.frequency.value = freq;
+  g.gain.setValueAtTime(vol, t0); g.gain.exponentialRampToValueAtTime(.0001, t0 + dur);
+  o.connect(g).connect(a.destination); o.start(t0); o.stop(t0 + dur + .02);
+}
+function hiss(){
+  const a = prog.sound && ac(); if (!a) return;
+  const len = a.sampleRate * 1.3, buf = a.createBuffer(1, len, a.sampleRate), d = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) d[i] = Math.random() * 2 - 1;
+  const src = a.createBufferSource(), f = a.createBiquadFilter(), g = a.createGain(), t0 = a.currentTime;
+  src.buffer = buf; f.type = 'highpass'; f.frequency.value = 2200;
+  g.gain.setValueAtTime(.0001, t0); g.gain.exponentialRampToValueAtTime(.3, t0 + .04); g.gain.exponentialRampToValueAtTime(.0001, t0 + 1.2);
+  src.connect(f).connect(g).connect(a.destination); src.start(t0);
+}
+const click = () => tone(440, 0, .05, 'square', .04);
+
+/* ---------- музыка: тихая колыбельная, 76 ударов в минуту, фа мажор.
+   Мелодия своя. Чётные проходы — мягкий «пульс» с вибрато, нечётные — музыкальная шкатулка. ---------- */
+const NOTE = { C:0, 'C#':1, Db:1, D:2, Eb:3, E:4, F:5, 'F#':6, G:7, Ab:8, A:9, Bb:10, B:11 };
+const hz = n => { const m = n.match(/^([A-G][b#]?)(\d)$/); return 440 * Math.pow(2, (NOTE[m[1]] + (+m[2] + 1) * 12 - 69) / 12); };
+const STEP = 60 / 76 / 2;
+const CHORDS = ['F','Am','Bb','F','Dm','Gm','C','C', 'Bb','C','Am','Dm','Gm','C','F','F'];
+const CHORD_TONES = { F:['F3','A3','C4'], Am:['A3','C4','E4'], Bb:['Bb3','D4','F4'], Dm:['D4','F4','A4'], Gm:['G3','Bb3','D4'], C:['C4','E4','G4'] };
+const BASS = { F:['F2','C3'], Am:['A2','E3'], Bb:['Bb2','F3'], Dm:['D3','A2'], Gm:['G2','D3'], C:['C3','G2'] };
+const MELODY = [
+  'A4 - C5 - A4 G4 F4 -', 'E4 - A4 - C5 - - -',  'D5 - C5 Bb4 A4 - F4 -', 'G4 - - - . . . .',
+  'F4 - A4 - D5 - C5 -',  'Bb4 - A4 G4 D4 - G4 -', 'E4 - G4 - C5 - Bb4 -', 'G4 - - - . . E4 F4',
+  'D5 - - F5 D5 - Bb4 -', 'C5 - - E5 C5 - G4 -',  'A4 - C5 - E5 - D5 C5', 'D5 - - - A4 - - -',
+  'Bb4 - D5 - G5 - F5 D5', 'E5 - - - C5 - G4 -',  'A4 - C5 - F5 - E5 C5', 'F5 - - - - - . .'
+].map(s => s.split(' '));
+const ARP = [0, 1, 2, 3, 2, 1, 0, 1];
+let mus = { out:null, timer:null, step:0, next:0, pulse:null, thin:null };
+
+function pulseWave(a, duty){
+  const N = 32, re = new Float32Array(N), im = new Float32Array(N);
+  for (let n = 1; n < N; n++) re[n] = 2 * Math.sin(Math.PI * n * duty) / (Math.PI * n);
+  return a.createPeriodicWave(re, im);
+}
+function musicBus(a){
+  if (mus.out) return;
+  mus.pulse = pulseWave(a, .25); mus.thin = pulseWave(a, .125);
+  const out = a.createGain(); out.gain.value = 0;
+  const lp = a.createBiquadFilter(); lp.type = 'lowpass'; lp.frequency.value = 2600;
+  const dl = a.createDelay(1); dl.delayTime.value = STEP * 1.5;
+  const fb = a.createGain(); fb.gain.value = .3;
+  const wet = a.createGain(); wet.gain.value = .28;
+  out.connect(lp); lp.connect(a.destination);
+  lp.connect(dl); dl.connect(fb); fb.connect(dl); dl.connect(wet); wet.connect(a.destination);
+  mus.out = out;
+}
+function voice(a, kind, f, t0, dur, vol){
+  const o = a.createOscillator(), g = a.createGain();
+  if (kind === 'bass') o.type = 'triangle';
+  else if (kind === 'bell') o.type = 'sine';
+  else o.setPeriodicWave(kind === 'lead' ? mus.pulse : mus.thin);
+  o.frequency.value = f;
+  if (kind === 'lead' && dur > STEP * 1.5) {
+    const lfo = a.createOscillator(), lg = a.createGain();
+    lfo.frequency.value = 5; lg.gain.setValueAtTime(0, t0); lg.gain.linearRampToValueAtTime(f * .012, t0 + .35);
+    lfo.connect(lg); lg.connect(o.frequency); lfo.start(t0); lfo.stop(t0 + dur + .3);
+  }
+  const atk = kind === 'bell' ? .005 : .03, rel = kind === 'bell' ? dur + .9 : dur + .12;
+  g.gain.setValueAtTime(.0001, t0);
+  g.gain.linearRampToValueAtTime(vol, t0 + atk);
+  if (kind === 'bell') g.gain.exponentialRampToValueAtTime(.0001, t0 + rel);
+  else { g.gain.setValueAtTime(vol * .85, t0 + Math.max(atk, dur - .05)); g.gain.exponentialRampToValueAtTime(.0001, t0 + rel); }
+  o.connect(g); g.connect(mus.out); o.start(t0); o.stop(t0 + rel + .05);
+  if (kind === 'bell') {
+    const o2 = a.createOscillator(), g2 = a.createGain(); o2.type = 'sine'; o2.frequency.value = f * 4;
+    g2.gain.setValueAtTime(vol * .18, t0); g2.gain.exponentialRampToValueAtTime(.0001, t0 + .4);
+    o2.connect(g2); g2.connect(mus.out); o2.start(t0); o2.stop(t0 + .45);
+  }
+}
+function playStep(a, i, t0){
+  const bar = Math.floor(i / 8) % 16, e = i % 8, pass = Math.floor(i / 128);
+  const ch = CHORDS[bar], tones = CHORD_TONES[ch];
+  const arpNote = ARP[e] === 3 ? hz(tones[0]) * 2 : hz(tones[ARP[e]]);
+  voice(a, 'arp', arpNote, t0, STEP * .8, .035);
+  if (e === 0) voice(a, 'bass', hz(BASS[ch][0]), t0, STEP * 3.6, .16);
+  if (e === 4) voice(a, 'bass', hz(BASS[ch][1]), t0, STEP * 3.6, .11);
+  const tok = MELODY[bar][e];
+  if (tok !== '-' && tok !== '.') {
+    let len = 1; while (e + len < 8 && MELODY[bar][e + len] === '-') len++;
+    if (pass % 2 === 0) voice(a, 'lead', hz(tok), t0, STEP * len * .95, .07);
+    else voice(a, 'bell', hz(tok) * 2, t0, STEP * len, .09);
+  }
+}
+function musicTick(){
+  const a = AC; if (!a || !mus.out || a.state !== 'running') return;
+  if (mus.next < a.currentTime) mus.next = a.currentTime + .05;
+  while (mus.next < a.currentTime + .3) { playStep(a, mus.step, mus.next); mus.next += STEP; mus.step++; }
+}
+function musicOn(){
+  if (!prog.music || mus.timer) return;
+  const a = ac(); if (!a) return;
+  musicBus(a);
+  mus.next = a.currentTime + .15;
+  mus.out.gain.cancelScheduledValues(a.currentTime);
+  mus.out.gain.setValueAtTime(.0001, a.currentTime); mus.out.gain.linearRampToValueAtTime(.55, a.currentTime + 2.5);
+  mus.timer = setInterval(musicTick, 50); musicTick();
+}
+function musicOff(){
+  if (!mus.timer) return;
+  clearInterval(mus.timer); mus.timer = null;
+  const a = AC; if (a && mus.out) { mus.out.gain.cancelScheduledValues(a.currentTime); mus.out.gain.setTargetAtTime(0, a.currentTime, .3); }
+}
+function toggleMusic(){ prog.music = !prog.music; saveProg(); labels(); prog.music ? musicOn() : musicOff(); }
+const firstGesture = () => { musicOn(); removeEventListener('pointerdown', firstGesture); removeEventListener('keydown', firstGesture); };
+addEventListener('pointerdown', firstGesture); addEventListener('keydown', firstGesture);
+document.addEventListener('visibilitychange', () => pause('hidden', document.hidden));
+addEventListener('blur', () => pause('hidden', true));
+addEventListener('focus', () => pause('hidden', document.hidden));
+
+/* ---------- управление ---------- */
+const KEYS = { ArrowUp:[0,-1], KeyW:[0,-1], ArrowDown:[0,1], KeyS:[0,1], ArrowLeft:[-1,0], KeyA:[-1,0], ArrowRight:[1,0], KeyD:[1,0] };
+function moveFocus(step, n = 1){
+  const list = [...$('s-' + screen).querySelectorAll('button:not([disabled])')].filter(b => b.offsetParent);
+  if (!list.length) return;
+  const i = list.indexOf(document.activeElement);
+  list[i < 0 ? 0 : Math.max(0, Math.min(list.length - 1, i + step * n))].focus();
+}
+addEventListener('keydown', e => {
+  if (screen === 'game') {
+    if (!$('win').hidden) { if (e.code === 'Escape') show('menu'); return; }
+    if (KEYS[e.code]) { e.preventDefault(); tryMove(...KEYS[e.code]); }
+    else if (e.code === 'KeyZ' || e.code === 'Backspace') { e.preventDefault(); undo(); }
+    else if (e.code === 'KeyR') load(level);
+    else if (e.code === 'Escape') show('menu');
+    return;
+  }
+  if (e.code === 'Escape' && screen !== 'menu') { show('menu'); return; }
+  const g = screen === 'levels', perRow = getComputedStyle($('levelGrid')).gridTemplateColumns.split(' ').length;
+  if (e.code === 'ArrowDown') { e.preventDefault(); moveFocus(1, g ? perRow : 1); }
+  if (e.code === 'ArrowUp') { e.preventDefault(); moveFocus(-1, g ? perRow : 1); }
+  if (g && e.code === 'ArrowRight') { e.preventDefault(); moveFocus(1); }
+  if (g && e.code === 'ArrowLeft') { e.preventDefault(); moveFocus(-1); }
+});
+document.querySelectorAll('.pad button').forEach(b => b.addEventListener('click', () => tryMove(...b.dataset.d.split(',').map(Number))));
+let sw = null;
+cv.addEventListener('pointerdown', e => { sw = [e.clientX, e.clientY]; });
+cv.addEventListener('pointerup', e => {
+  if (!sw) return; const dx = e.clientX - sw[0], dy = e.clientY - sw[1]; sw = null;
+  if (Math.max(Math.abs(dx), Math.abs(dy)) < 18) return;
+  Math.abs(dx) > Math.abs(dy) ? tryMove(Math.sign(dx), 0) : tryMove(0, Math.sign(dy));
+});
+addEventListener('contextmenu', e => e.preventDefault());
+
+const on = (id, fn) => $(id).addEventListener('click', () => { click(); fn(); });
+on('bContinue', () => startLevel(doneCount() === LEVELS.length ? 0 : firstOpen()));
+on('bNew', () => { if (doneCount() === 0) { startLevel(0); return; } $('menuMain').hidden = true; $('menuConfirm').hidden = false; $('bNewNo').focus(); });
+on('bNewYes', () => { prog.best = {}; prog.cur = 0; saveProg(); startLevel(0); });
+on('bNewNo', () => { refreshMenu(); $('bNew').focus(); });
+on('bLevels', () => show('levels'));
+on('bSound', () => { prog.sound = !prog.sound; saveProg(); labels(); });
+on('bMusic', toggleMusic);
+on('bMusicG', toggleMusic);
+on('bExit', () => { if (window.Android && Android.exit) Android.exit(); else show('exit'); });
+on('bBack', () => show('menu'));
+on('bLevelsBack', () => show('menu'));
+on('bMenu', () => show('menu'));
+on('undo', undo);
+on('restart', () => load(level));
+on('again', () => load(level));
+on('next', () => { const n = level + 1; $('win').hidden = true; showAd(() => startLevel(n)); });
+on('bFinalMenu', () => show('menu'));
+on('bFinalLevels', () => show('levels'));
+
+/* ---------- приложение для Android: кнопка «Назад» и сворачивание ---------- */
+window.onAndroidBack = () => {
+  if (screen === 'menu') { if (!$('menuConfirm').hidden) { refreshMenu(); return true; } return false; }
+  show('menu'); return true;
+};
+window.onAndroidPause = on => pause('hidden', !!on);
+
+/* ---------- запуск ---------- */
+function boot(){
+  show('menu');
+  requestAnimationFrame(frame);
+}
+applyLang(navigator.language);
+if (window.YaGames) {
+  YaGames.init().then(sdk => {
+    ysdk = sdk;
+    try { applyLang(sdk.environment.i18n.lang); } catch (e) {}
+    sdk.on && sdk.on('game_api_pause', () => pause('api', true));
+    sdk.on && sdk.on('game_api_resume', () => pause('api', false));
+    boot();
+    const ready = () => { try { sdk.features.LoadingAPI.ready(); } catch (e) {} };
+    (document.fonts ? document.fonts.ready : Promise.resolve()).then(() => requestAnimationFrame(ready));
+  }).catch(boot);
+} else boot();
+})();
+</script>
